@@ -6,9 +6,102 @@ import (
     "log"
     "net/http"
     "encoding/json"
+    "time"
+    "context"
+    "strings"
+
+	// Auntification
+	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/bcrypt"
 
 	_ "github.com/lib/pq"
 )
+
+var jwtKey = []byte("SUPER_SECRET_KEY")
+
+type Claims struct {
+    UserID int    `json:"user_id"`
+    Email  string `json:"email"`
+    jwt.RegisteredClaims
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var creds struct {
+        Email    string `json:"email"`
+        Password string `json:"password"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+        http.Error(w, "Некорректные данные", http.StatusBadRequest)
+        return
+    }
+
+    var user User
+    var hashedPassword string
+    err := db.QueryRow("SELECT id, name, email, password FROM users WHERE email = $1", creds.Email).
+        Scan(&user.ID, &user.Name, &user.Email, &hashedPassword)
+    if err != nil {
+        http.Error(w, "Неверный логин или пароль", http.StatusUnauthorized)
+        return
+    }
+
+    if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(creds.Password)); err != nil {
+        http.Error(w, "Неверный логин или пароль", http.StatusUnauthorized)
+        return
+    }
+
+    expirationTime := time.Now().Add(60 * time.Minute)
+    claims := &Claims{
+        UserID: user.ID,
+        Email:  user.Email,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+        },
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    tokenString, err := token.SignedString(jwtKey)
+    if err != nil {
+        http.Error(w, "Ошибка при генерации токена", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
+}
+
+func authMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Отсутствует токен авторизации", http.StatusUnauthorized)
+            return
+        }
+        parts := strings.Split(authHeader, " ")
+        if len(parts) != 2 || parts[0] != "Bearer" {
+            http.Error(w, "Неверный формат заголовка Authorization", http.StatusUnauthorized)
+            return
+        }
+        tokenStr := parts[1]
+
+        claims := &Claims{}
+        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+        if err != nil || !token.Valid {
+            http.Error(w, "Невалидный или просроченный токен", http.StatusUnauthorized)
+            return
+        }
+
+        ctx := context.WithValue(r.Context(), "userID", claims.UserID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
 
 // Var to store DB connection
 var db *sql.DB
@@ -17,6 +110,7 @@ type User struct{
 	ID int `json:"id"`
 	Name string `json:"name"`
 	Email string `json:"email"`
+    Password string `json:"password,omitempty"`
 }
 
 type Post struct {
@@ -59,7 +153,8 @@ func createTables(){
 	CREATE TABLE IF NOT EXISTS users (
 		id SERIAL PRIMARY KEY,
 		name VARCHAR(100) NOT NULL,
-		email VARCHAR(100) NOT NULL UNIQUE
+		email VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(200) NOT NULL
 	);
 	CREATE TABLE IF NOT EXISTS posts (
 		id SERIAL PRIMARY KEY,
@@ -114,12 +209,21 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    query := `INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id`
-    err := db.QueryRow(query, newUser.Name, newUser.Email).Scan(&newUser.ID)
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
+    if err != nil {
+        http.Error(w, "Ошибка при хешировании пароля", http.StatusInternalServerError)
+        return
+    }
+
+    query := `INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id`
+    err = db.QueryRow(query, newUser.Name, newUser.Email, string(hashedPassword)).Scan(&newUser.ID)
     if err != nil {
         http.Error(w, "Ошибка при создании пользователя", http.StatusInternalServerError)
         return
     }
+
+    // To avoid returning hash string in external JSON
+    newUser.Password = ""
 
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusCreated)
@@ -278,13 +382,15 @@ func main (){
 	// DB init
 	initDB()
 
+    http.HandleFunc("/login", loginHandler)
+
 	// Rout registraton
 	http.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
         switch r.Method {
         case http.MethodGet:
             getUsersHandler(w, r)        // Get all users
         case http.MethodPost:
-            createUserHandler(w, r)      // Creat user
+            createUserHandler(w, r)      // Create user
         case http.MethodPut:
             updateUserHandler(w, r)      // Update user
         default:
@@ -292,7 +398,7 @@ func main (){
         }
     })
 
-	http.HandleFunc("/posts", func(w http.ResponseWriter, r *http.Request) {
+    http.Handle("/posts", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         switch r.Method {
         case http.MethodGet:
             getPostsHandler(w, r)        // Get all posts
@@ -303,20 +409,20 @@ func main (){
         default:
             http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
         }
-    })
+    })))
 
-    http.HandleFunc("/comments", func(w http.ResponseWriter, r *http.Request) {
+    http.Handle("/comments", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         switch r.Method {
         case http.MethodGet:
             getCommentsHandler(w, r)     // Get all comments
         case http.MethodPost:
             createCommentHandler(w, r)   // Create comment
-        case http.MethodPut:
+        case http.MethodPut:    
             updateCommentHandler(w, r)   // Update comment
         default:
             http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
         }
-    })
+    })))
 	
 	fmt.Println("Сервер запущен на http://localhost:8080")
     log.Fatal(http.ListenAndServe(":8080", nil))
