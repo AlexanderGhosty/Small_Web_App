@@ -1,198 +1,208 @@
-# Go Small Web App
+# Small Web App
 
-This project is a simple web application written in Go. It connects to a PostgreSQL database and exposes RESTful endpoints for managing users, posts, and comments.
+This repository provides a small web application example using Go (Golang). It demonstrates how to structure a Go project with separate packages for database connections, handlers, middleware, and models. It also includes a basic JWT-based authentication flow and simple CRUD operations for users, posts, and comments.
 
 ## Features
-- Connects to a PostgreSQL database (with example connection string: `postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable`)
-- Creates `users`, `posts`, and `comments` tables if they don’t already exist
-- Exposes REST endpoints to **GET**, **POST**, and **PUT** records in each table
-- Returns responses in JSON format
 
-## Prerequisites
-1. **Go** (version 1.18 or higher recommended)
-2. **PostgreSQL** installed and running
-3. A valid PostgreSQL user with the correct credentials. The default connection in the code is:
-   ```
-   postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
-   ```
-   If needed, adjust it in the `initDB()` function in `main.go`.
+- **JWT authentication** for user login and protected routes  
+- **CRUD** operations for:
+  - Users  
+  - Posts  
+  - Comments  
+- **Modular architecture** using Go packages and a recommended folder structure  
+- **PostgreSQL** database integration and automatic table creation if they do not exist  
 
-## Installation and Setup
-1. Clone or download this repository.
-2. Ensure the `go.mod` and `go.sum` files are present. 
-3. Run:
+## Folder Structure
+
+```bash
+go-small-webapp/
+├── cmd/
+│   └── webapp/
+│       └── main.go
+├── internal/
+│   ├── database/
+│   │   └── db.go
+│   ├── handlers/
+│   │   ├── auth.go
+│   │   ├── user_handlers.go
+│   │   ├── post_handlers.go
+│   │   └── comment_handlers.go
+│   ├── middleware/
+│   │   └── auth_middleware.go
+│   └── models/
+│       ├── user.go
+│       ├── post.go
+│       └── comment.go
+├── go.mod
+└── go.sum
+```
+
+**Brief explanation of each main folder/file:**
+
+- **cmd/webapp/main.go**  
+  - Entry point of the application. Initializes the database, registers routes, and starts the HTTP server.
+
+- **internal/database/db.go**  
+  - Responsible for database connection setup and creating initial tables if they do not exist.
+
+- **internal/handlers/\***  
+  - Contains HTTP handler functions grouped by feature (authentication, users, posts, comments). 
+  - Each file handles routing logic (GET, POST, PUT, etc.) for a specific resource.
+
+- **internal/middleware/auth_middleware.go**  
+  - Provides middleware for parsing and verifying JWT tokens before protected routes.
+
+- **internal/models/\***  
+  - Defines Go structs (models) representing database entities (User, Post, Comment).
+
+## Getting Started
+
+### Prerequisites
+
+- **Go** (v1.19 or higher recommended)  
+- **PostgreSQL** server running locally (or accessible remotely)  
+
+### Installation
+
+1. **Clone** this repository:
+   ```bash
+   git clone https://github.com/your-username/go-small-webapp.git
    ```
+2. **Navigate** to the project folder:
+   ```bash
+   cd go-small-webapp
+   ```
+3. **Configure** your database settings:
+   - By default, the connection string is located in `internal/database/db.go`. Update it if necessary to match your PostgreSQL credentials:
+     ```go
+     connStr := "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+     ```
+   - Alternatively, you can load environment variables in a custom way and build your connection string, but that would require updating the code to read from environment variables.
+
+4. **Install dependencies**:
+   ```bash
    go mod tidy
    ```
-   to install required dependencies (like `github.com/lib/pq`).
-4. Start the application:
-   ```
-   go run main.go
-   ```
-5. Once the application is running, it will listen on `http://localhost:8080`.  
-   The first time it runs, it will create the `users`, `posts`, and `comments` tables in your PostgreSQL database if they do not already exist.
+
+### Running the Application
+
+From the project root directory, run:
+```bash
+go run ./cmd/webapp
+```
+This will:
+
+1. Connect to your PostgreSQL database.  
+2. Automatically create tables (`users`, `posts`, `comments`) if they do not exist.  
+3. Start a local HTTP server at `http://localhost:8080`.
+
+You should see output similar to:
+```
+Connection established
+Server started on http://localhost:8080
+```
 
 ## Usage
-Below are the endpoints and example **Windows** `curl` commands for **GET**, **POST**, and **PUT** requests.  
-> **Note**: On Windows, you typically have `curl.exe` available (either built-in or installed). Use the exact syntax with quotes as shown below.
 
----
+### Authentication
 
-### 1. Users
-
-#### GET all users
-```
-curl.exe -X GET "http://localhost:8080/users"
-```
-Example response:
-```json
-[
+- **Endpoint**: `POST /login`  
+- **Body** (JSON):
+  ```json
   {
-    "id": 1,
-    "name": "John Doe",
-    "email": "john@example.com"
-  },
-  ...
-]
-```
-
-#### POST (create new user)
-```
-curl.exe -X POST "http://localhost:8080/users" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"name\":\"John Doe\",\"email\":\"john@example.com\"}"
-```
-Example response:
-```json
-{
-  "id": 1,
-  "name": "John Doe",
-  "email": "john@example.com"
-}
-```
-
-#### PUT (update user)
-```
-curl.exe -X PUT "http://localhost:8080/users" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"id\":1,\"name\":\"John Updated\",\"email\":\"john.updated@example.com\"}"
-```
-Example response:
-```json
-{
-  "id": 1,
-  "name": "John Updated",
-  "email": "john.updated@example.com"
-}
-```
-
----
-
-### 2. Posts
-
-#### GET all posts
-```
-curl.exe -X GET "http://localhost:8080/posts"
-```
-Example response:
-```json
-[
+    "email": "your-email@example.com",
+    "password": "your-secret-password"
+  }
+  ```
+- **Response**:
+  ```json
   {
-    "id": 1,
-    "user_id": 1,
-    "title": "Sample Post",
-    "content": "Hello, this is a post"
-  },
-  ...
-]
-```
+    "token": "<JWT_TOKEN>"
+  }
+  ```
 
-#### POST (create new post)
-```
-curl.exe -X POST "http://localhost:8080/posts" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"user_id\":1,\"title\":\"My First Post\",\"content\":\"This is a post content.\"}"
-```
-Example response:
+Use this token in the `Authorization` header as `Bearer <JWT_TOKEN>` for protected routes (e.g., `/posts`, `/comments`).
+
+### Users
+
+- **Endpoint**: `GET /users`  
+  - Returns a list of all users (no token required in this example).
+
+- **Endpoint**: `POST /users`  
+  - Creates a new user.  
+  - **Body** (JSON):
+    ```json
+    {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "password": "secret"
+    }
+    ```
+
+- **Endpoint**: `PUT /users`  
+  - Updates an existing user.  
+  - **Body** (JSON):
+    ```json
+    {
+      "id": 1,
+      "name": "John Updated",
+      "email": "johnupdated@example.com"
+    }
+    ```
+
+### Posts
+
+Protected by **JWT**:
+
+- **Endpoint**: `GET /posts`  
+  - Returns all posts.  
+  - Requires valid `Authorization: Bearer <token>` header.
+
+- **Endpoint**: `POST /posts`  
+  - Creates a new post.  
+  - **Body** (JSON):
+    ```json
+    {
+      "user_id": 1,
+      "title": "My First Post",
+      "content": "This is the body of the post."
+    }
+    ```
+
+- **Endpoint**: `PUT /posts`  
+  - Updates an existing post.  
+  - **Body** (JSON):
+    ```json
+    {
+      "id": 1,
+      "title": "Updated Title",
+      "content": "Updated content."
+    }
+    ```
+
+### Comments
+
+Also protected by **JWT**:
+
+- **Endpoint**: `GET /comments`  
+- **Endpoint**: `POST /comments`  
+- **Endpoint**: `PUT /comments`  
+
+Example **POST** request body:
 ```json
 {
-  "id": 1,
-  "user_id": 1,
-  "title": "My First Post",
-  "content": "This is a post content."
-}
-```
-
-#### PUT (update post)
-```
-curl.exe -X PUT "http://localhost:8080/posts" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"id\":1,\"title\":\"Updated Title\",\"content\":\"Updated post content.\"}"
-```
-Example response:
-```json
-{
-  "id": 1,
-  "user_id": 1,
-  "title": "Updated Title",
-  "content": "Updated post content."
-}
-```
-
----
-
-### 3. Comments
-
-#### GET all comments
-```
-curl.exe -X GET "http://localhost:8080/comments"
-```
-Example response:
-```json
-[
-  {
-    "id": 1,
-    "post_id": 1,
-    "author": "Alice",
-    "text": "Nice post!"
-  },
-  ...
-]
-```
-
-#### POST (create new comment)
-```
-curl.exe -X POST "http://localhost:8080/comments" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"post_id\":1,\"author\":\"Alice\",\"text\":\"Great post content!\"}"
-```
-Example response:
-```json
-{
-  "id": 1,
   "post_id": 1,
-  "author": "Alice",
-  "text": "Great post content!"
+  "author": "Some Author",
+  "text": "This is a comment."
 }
 ```
 
-#### PUT (update comment)
-```
-curl.exe -X PUT "http://localhost:8080/comments" ^
-    -H "Content-Type: application/json" ^
-    -d "{\"id\":1,\"author\":\"Alice Updated\",\"text\":\"This comment has been updated.\"}"
-```
-Example response:
-```json
-{
-  "id": 1,
-  "post_id": 1,
-  "author": "Alice Updated",
-  "text": "This comment has been updated."
-}
-```
+## Customization
 
----
+- Modify the connection string in `internal/database/db.go` or replace it with environment variable logic to suit your environment.  
+- Adjust the table creation in `CreateTables` if you need additional fields or different schema.  
+- Update the routes or split them further if your project grows.
 
 ## License
-This project is open-source and available under the [MIT License](https://opensource.org/licenses/MIT).
+
+This project is distributed under the MIT License. Feel free to use it as a template or a starting point for your own Go web applications.
