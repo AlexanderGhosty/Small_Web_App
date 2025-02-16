@@ -8,7 +8,7 @@ import (
     "small_web_app/internal/models"
 )
 
-// Маршрутизатор для /posts
+// Router for /posts
 func PostHandlers(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
@@ -18,7 +18,7 @@ func PostHandlers(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     case http.MethodPut:
         updatePostHandler(db, w, r)
     default:
-        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 }
 

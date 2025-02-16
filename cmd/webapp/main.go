@@ -11,32 +11,32 @@ import (
 )
 
 func main() {
-    // Инициализируем базу
+    // DB initialization
     db, err := database.InitDB()
     if err != nil {
-        log.Fatalf("Ошибка инициализации БД: %v", err)
+        log.Fatalf("Error initializing the database: %v", err)
     }
     defer db.Close()
 
-    // Создаём таблицы (если нужно)
+    // Creating tables
     if err := database.CreateTables(db); err != nil {
-        log.Printf("Ошибка при создании таблиц: %v", err)
+        log.Printf("Error creating tables: %v", err)
     }
 
-    // Регистрируем все маршруты
+    // Register all routes
     mux := http.NewServeMux()
 
-    // Маршрут для логина (не требует middleware)
+    // Login route (does not require middleware)
     mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
         handlers.LoginHandler(db, w, r)
     })
 
-    // Группа маршрутов /users
+    // User routes group
     mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
         handlers.UserHandlers(db, w, r)
     })
 
-    // Пример – для защищённых маршрутов используем middleware
+    // Example – use middleware for protected routes
     mux.Handle("/posts", middleware.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         handlers.PostHandlers(db, w, r)
     })))
@@ -45,6 +45,6 @@ func main() {
         handlers.CommentHandlers(db, w, r)
     })))
 
-    fmt.Println("Сервер запущен на http://localhost:8080")
+    fmt.Println("Server started at http://localhost:8080")
     log.Fatal(http.ListenAndServe(":8080", mux))
 }

@@ -11,8 +11,8 @@ import (
     "small_web_app/internal/models"
 )
 
-// Один общий router-хендлер на /users
-// Выбираем метод запроса и вызываем нужную функцию
+// A single common router-handler for /users
+// Determines the request method and calls the appropriate function
 func UserHandlers(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
@@ -22,14 +22,14 @@ func UserHandlers(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     case http.MethodPut:
         updateUserHandler(db, w, r)
     default:
-        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
 }
 
 func getUsersHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     rows, err := db.Query("SELECT id, name, email FROM users")
     if err != nil {
-        http.Error(w, "Ошибка при запросе пользователей", http.StatusInternalServerError)
+        http.Error(w, "Error retrieving users", http.StatusInternalServerError)
         return
     }
     defer rows.Close()
@@ -38,7 +38,7 @@ func getUsersHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     for rows.Next() {
         var u models.User
         if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
-            http.Error(w, "Ошибка чтения данных пользователя", http.StatusInternalServerError)
+            http.Error(w, "Error reading user data", http.StatusInternalServerError)
             return
         }
         users = append(users, u)
@@ -51,24 +51,24 @@ func getUsersHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 func createUserHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     var newUser models.User
     if err := json.NewDecoder(r.Body).Decode(&newUser); err != nil {
-        http.Error(w, "Некорректные данные пользователя", http.StatusBadRequest)
+        http.Error(w, "Invalid user data", http.StatusBadRequest)
         return
     }
 
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
     if err != nil {
-        http.Error(w, "Ошибка при хешировании пароля", http.StatusInternalServerError)
+        http.Error(w, "Error hashing password", http.StatusInternalServerError)
         return
     }
 
     query := `INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id`
     err = db.QueryRow(query, newUser.Name, newUser.Email, string(hashedPassword)).Scan(&newUser.ID)
     if err != nil {
-        http.Error(w, "Ошибка при создании пользователя", http.StatusInternalServerError)
+        http.Error(w, "Error creating user", http.StatusInternalServerError)
         return
     }
 
-    // чтобы не возвращать hash в ответе
+    // To avoid returning the password hash in the response
     newUser.Password = ""
 
     w.Header().Set("Content-Type", "application/json")
@@ -79,16 +79,16 @@ func createUserHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 func updateUserHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     var u models.User
     if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-        log.Printf("Ошибка декодирования JSON: %v\n", err)
-        http.Error(w, "Некорректные данные для обновления", http.StatusBadRequest)
+        log.Printf("Error decoding JSON: %v\n", err)
+        http.Error(w, "Invalid data for update", http.StatusBadRequest)
         return
     }
 
     query := `UPDATE users SET name = $1, email = $2 WHERE id = $3`
     _, err := db.Exec(query, u.Name, u.Email, u.ID)
     if err != nil {
-        log.Printf("Ошибка обновления пользователя: %v\n", err)
-        http.Error(w, "Ошибка при обновлении пользователя", http.StatusInternalServerError)
+        log.Printf("Error updating user: %v\n", err)
+        http.Error(w, "Error updating user", http.StatusInternalServerError)
         return
     }
 

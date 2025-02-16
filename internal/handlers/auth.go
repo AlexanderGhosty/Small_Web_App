@@ -23,7 +23,7 @@ type Claims struct {
 
 func LoginHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
-        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
     }
 
@@ -32,7 +32,7 @@ func LoginHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
         Password string `json:"password"`
     }
     if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-        http.Error(w, "Некорректные данные", http.StatusBadRequest)
+        http.Error(w, "Invalid data", http.StatusBadRequest)
         return
     }
 
@@ -41,17 +41,17 @@ func LoginHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     err := db.QueryRow("SELECT id, name, email, password FROM users WHERE email = $1", creds.Email).
         Scan(&user.ID, &user.Name, &user.Email, &hashedPassword)
     if err != nil {
-        http.Error(w, "Неверный логин или пароль", http.StatusUnauthorized)
+        http.Error(w, "Incorrect login or password", http.StatusUnauthorized)
         return
     }
 
-    // Сравниваем хеш
+    // Compare the hash
     if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(creds.Password)); err != nil {
-        http.Error(w, "Неверный логин или пароль", http.StatusUnauthorized)
+        http.Error(w, "Incorrect login or password", http.StatusUnauthorized)
         return
     }
 
-    // Формируем токен
+    // Generate token
     expirationTime := time.Now().Add(60 * time.Minute)
     claims := &Claims{
         UserID: user.ID,
@@ -63,7 +63,7 @@ func LoginHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
     tokenString, err := token.SignedString(jwtKey)
     if err != nil {
-        http.Error(w, "Ошибка при генерации токена", http.StatusInternalServerError)
+        http.Error(w, "Error generating token", http.StatusInternalServerError)
         return
     }
 
@@ -71,7 +71,7 @@ func LoginHandler(db *sql.DB, w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
 }
 
-// Пример: может использоваться, если нужно вручную распарсить токен
+// Example: can be used if token needs to be manually parsed
 func ParseToken(tokenStr string) (*Claims, error) {
     claims := &Claims{}
     token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
